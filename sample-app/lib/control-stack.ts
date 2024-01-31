@@ -8,7 +8,7 @@ import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Bucket } from "aws-cdk-lib/aws-s3";
 import { Topic } from "aws-cdk-lib/aws-sns";
 import { Queue } from "aws-cdk-lib/aws-sqs";
-import { CfnWebACL } from "aws-cdk-lib/aws-waf";
+import { CfnWebACL } from "aws-cdk-lib/aws-wafv2";
 import { Construct } from "constructs";
 
 export class ControlStack extends cdk.Stack {
@@ -53,10 +53,14 @@ export class ControlStack extends cdk.Stack {
 
     new CfnWebACL(this, "WebACL", {
       defaultAction: {
-        type: "ALLOW",
+        allow: {},
       },
-      metricName: "WebACL",
-      name: "WebACL",
+      scope: "CLOUDFRONT",
+      visibilityConfig: {
+        sampledRequestsEnabled: true,
+        cloudWatchMetricsEnabled: true,
+        metricName: "webACL",
+      },
     });
   }
 }
