@@ -160,8 +160,9 @@ export class CompliantStack extends cdk.Stack {
      * Needs 2 remediations
      * 1. Point-in-time recovery (MEDIUM)
      * 2. Deletion protection (MEDIUM)
+     * 4. Auto scale (MEDIUM)
      */
-    new Table(this, "table", {
+    const table = new Table(this, "table", {
       partitionKey: {
         name: "id",
         type: AttributeType.STRING,
@@ -169,6 +170,13 @@ export class CompliantStack extends cdk.Stack {
       pointInTimeRecovery: true,
       deletionProtection: true,
     });
+
+    table
+      .autoScaleReadCapacity({ minCapacity: 1, maxCapacity: 2 })
+      .scaleOnUtilization({ targetUtilizationPercent: 50 });
+    table
+      .autoScaleWriteCapacity({ minCapacity: 1, maxCapacity: 2 })
+      .scaleOnUtilization({ targetUtilizationPercent: 50 });
 
     // new Vpc(this, "vpc"); // wait for Elastic IP quota increase
 
