@@ -6,10 +6,12 @@ import {
 } from "aws-cdk-lib/aws-cloudfront";
 import { AttributeType, Table } from "aws-cdk-lib/aws-dynamodb";
 import { HttpMethod } from "aws-cdk-lib/aws-events";
+import { Role } from "aws-cdk-lib/aws-iam";
+import { Key } from "aws-cdk-lib/aws-kms";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Bucket, EventType } from "aws-cdk-lib/aws-s3";
 import { SnsDestination } from "aws-cdk-lib/aws-s3-notifications";
-import { Topic } from "aws-cdk-lib/aws-sns";
+import { LoggingProtocol, Topic } from "aws-cdk-lib/aws-sns";
 import { Queue } from "aws-cdk-lib/aws-sqs";
 import { CfnWebACL } from "aws-cdk-lib/aws-wafv2";
 import { Construct } from "constructs";
@@ -25,10 +27,30 @@ export class CompliantStack extends cdk.Stack {
 
     /**
      * Needs 2 remediations for NIST
-     * 1. TODO: Encryption (MEDIUM)
-     * 2. TODO: Delivery status logging (MEDIUM)
+     * 1. Encryption at rest (MEDIUM)
+     * 2. Delivery status logging (MEDIUM)
      */
-    const topic = new Topic(this, "SnsTopic");
+    const topic = new Topic(this, "SnsTopic", {
+      masterKey: Key.fromLookup(this, "SnsKey", {
+        aliasName: "alias/aws/sns",
+      }),
+      loggingConfigs: [
+        {
+          protocol: LoggingProtocol.LAMBDA,
+          successFeedbackSampleRate: 100,
+          failureFeedbackRole: Role.fromRoleName(
+            this,
+            "SNSFailureFeedback",
+            "SNSFailureFeedback"
+          ),
+          successFeedbackRole: Role.fromRoleName(
+            this,
+            "SNSSuccessFeedback",
+            "SNSSuccessFeedback"
+          ),
+        },
+      ],
+    });
 
     /**
      * Needs 3 remediations
