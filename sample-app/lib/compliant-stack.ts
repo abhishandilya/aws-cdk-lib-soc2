@@ -7,7 +7,7 @@ import {
 import { AttributeType, Table } from "aws-cdk-lib/aws-dynamodb";
 import { HttpMethod } from "aws-cdk-lib/aws-events";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { Bucket, BucketAccessControl, EventType } from "aws-cdk-lib/aws-s3";
+import { Bucket, EventType } from "aws-cdk-lib/aws-s3";
 import { SnsDestination } from "aws-cdk-lib/aws-s3-notifications";
 import { Topic } from "aws-cdk-lib/aws-sns";
 import { Queue } from "aws-cdk-lib/aws-sqs";
@@ -52,22 +52,6 @@ export class CompliantStack extends cdk.Stack {
       new SnsDestination(topic)
     );
 
-    const cloudfrontLogBucket = new Bucket(this, "cloudfrontLog", {
-      enforceSSL: true,
-      serverAccessLogsPrefix: "self/",
-      lifecycleRules: [
-        {
-          expiredObjectDeleteMarker: true,
-        },
-      ],
-      accessControl: BucketAccessControl.LOG_DELIVERY_WRITE,
-    });
-
-    cloudfrontLogBucket.addEventNotification(
-      EventType.OBJECT_REMOVED,
-      new SnsDestination(topic)
-    );
-
     /**
      * Needs 3 remediations
      * 1. At least one rule
@@ -108,7 +92,7 @@ export class CompliantStack extends cdk.Stack {
 
     /**
      * Needs 6 Remediations
-     * 1. Logging (MEDIUM)
+     * 1. TODO: Logging (MEDIUM)
      * 2. TODO: Custom SSL/TLS certificate (MEDIUM)
      * 3. TODO: Use Origin Access Control (MEDIUM)
      * 4. WAF (MEDIUM)
@@ -116,10 +100,6 @@ export class CompliantStack extends cdk.Stack {
      * 6. TODO: HTTPS (LOW)
      */
     new CloudFrontWebDistribution(this, "cloudfront", {
-      loggingConfig: {
-        bucket: cloudfrontLogBucket,
-        prefix: "cloudfront",
-      },
       webACLId: cloudfrontWebACL.attrArn,
       originConfigs: [
         {
@@ -133,7 +113,6 @@ export class CompliantStack extends cdk.Stack {
           ],
           failoverS3OriginSource: {
             s3BucketSource: bucket,
-            originPath: "failover/",
           },
           failoverCriteriaStatusCodes: [FailoverStatusCode.FORBIDDEN],
         },
