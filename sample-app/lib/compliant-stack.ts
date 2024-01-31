@@ -1,10 +1,14 @@
 import * as cdk from "aws-cdk-lib";
 import { RestApi } from "aws-cdk-lib/aws-apigateway";
-import { CloudFrontWebDistribution } from "aws-cdk-lib/aws-cloudfront";
+import {
+  CloudFrontWebDistribution,
+  FailoverStatusCode,
+} from "aws-cdk-lib/aws-cloudfront";
 import { AttributeType, Table } from "aws-cdk-lib/aws-dynamodb";
 import { HttpMethod } from "aws-cdk-lib/aws-events";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
-import { Bucket } from "aws-cdk-lib/aws-s3";
+import { Bucket, BucketAccessControl, EventType } from "aws-cdk-lib/aws-s3";
+import { SnsDestination } from "aws-cdk-lib/aws-s3-notifications";
 import { Topic } from "aws-cdk-lib/aws-sns";
 import { Queue } from "aws-cdk-lib/aws-sqs";
 import { CfnWebACL } from "aws-cdk-lib/aws-wafv2";
@@ -20,8 +24,15 @@ export class CompliantStack extends cdk.Stack {
     new NodejsFunction(this, "nodejs");
 
     /**
+     * Needs 2 remediations for NIST
+     * 1. TODO: Encryption (MEDIUM)
+     * 2. TODO: Delivery status logging (MEDIUM)
+     */
+    const topic = new Topic(this, "SnsTopic");
+
+    /**
      * Needs 3 remediations
-     * 1. TODO: Event notification (MEDIUM)
+     * 1. Event notification (MEDIUM)
      * 2. Server Access Logging (MEDIUM)
      * 3. SSL enforced (MEDIUM)
      * 4. LifeCycle Policy (LOW)
@@ -36,69 +47,26 @@ export class CompliantStack extends cdk.Stack {
       ],
     });
 
-    /**
-     * Needs 6 Remediations
-     * 1. TODO: Logging
-     * 2. TODO: Custom SSL/TLS certificate
-     * 3. TODO: Use Origin Access Control
-     * 4. TODO: WAF
-     * 5. TODO: Origin Failover (LOW)
-     * 6. TODO: HTTPS (LOW)
-     *
-     */
-    new CloudFrontWebDistribution(this, "cloudfront", {
-      originConfigs: [
+    bucket.addEventNotification(
+      EventType.OBJECT_REMOVED,
+      new SnsDestination(topic)
+    );
+
+    const cloudfrontLogBucket = new Bucket(this, "cloudfrontLog", {
+      enforceSSL: true,
+      serverAccessLogsPrefix: "self/",
+      lifecycleRules: [
         {
-          s3OriginSource: {
-            s3BucketSource: bucket,
-          },
-          behaviors: [
-            {
-              isDefaultBehavior: true,
-            },
-          ],
+          expiredObjectDeleteMarker: true,
         },
       ],
+      accessControl: BucketAccessControl.LOG_DELIVERY_WRITE,
     });
 
-    /**
-     * Needs 3 remediations
-     * 1. TODO: Execution logging (MEDIUM)
-     * 2. TODO: WAF (MEDIUM)
-     * 3. TODO: X-Ray tracing (LOW)
-     */
-    const restApi = new RestApi(this, "restApi");
-
-    restApi.root.addMethod(HttpMethod.GET);
-
-    /**
-     * Needs 2 remediations
-     * 1. Point-in-time recovery (MEDIUM)
-     * 2. Deletion protection (MEDIUM)
-     */
-    new Table(this, "table", {
-      partitionKey: {
-        name: "id",
-        type: AttributeType.STRING,
-      },
-      pointInTimeRecovery: true,
-      deletionProtection: true,
-    });
-
-    /**
-     * Needs 2 remediations
-     * 1. TODO: Encryption (MEDIUM)
-     * 2. TODO: Delivery status logging (MEDIUM)
-     */
-    new Topic(this, "SnsTopic");
-
-    // new Vpc(this, "vpc"); // wait for Elastic IP quota increase
-
-    /**
-     * Needs 1 remediation
-     * 1. TODO: Encryption (MEDIUM)
-     */
-    new Queue(this, "queue");
+    cloudfrontLogBucket.addEventNotification(
+      EventType.OBJECT_REMOVED,
+      new SnsDestination(topic)
+    );
 
     /**
      * Needs 3 remediations
@@ -106,7 +74,7 @@ export class CompliantStack extends cdk.Stack {
      * 2. Logging
      * 3. Metrics
      */
-    new CfnWebACL(this, "WebACL", {
+    const cloudfrontWebACL = new CfnWebACL(this, "WebACL", {
       defaultAction: {
         allow: {},
       },
@@ -137,5 +105,71 @@ export class CompliantStack extends cdk.Stack {
         },
       ],
     });
+
+    /**
+     * Needs 6 Remediations
+     * 1. Logging (MEDIUM)
+     * 2. TODO: Custom SSL/TLS certificate (MEDIUM)
+     * 3. TODO: Use Origin Access Control (MEDIUM)
+     * 4. WAF (MEDIUM)
+     * 5. Origin Failover (LOW)
+     * 6. TODO: HTTPS (LOW)
+     */
+    new CloudFrontWebDistribution(this, "cloudfront", {
+      loggingConfig: {
+        bucket: cloudfrontLogBucket,
+        prefix: "cloudfront",
+      },
+      webACLId: cloudfrontWebACL.attrArn,
+      originConfigs: [
+        {
+          s3OriginSource: {
+            s3BucketSource: bucket,
+          },
+          behaviors: [
+            {
+              isDefaultBehavior: true,
+            },
+          ],
+          failoverS3OriginSource: {
+            s3BucketSource: bucket,
+            originPath: "failover/",
+          },
+          failoverCriteriaStatusCodes: [FailoverStatusCode.FORBIDDEN],
+        },
+      ],
+    });
+
+    /**
+     * Needs 3 remediations
+     * 1. TODO: Execution logging (MEDIUM)
+     * 2. TODO: WAF (MEDIUM)
+     * 3. TODO: X-Ray tracing (LOW)
+     */
+    const restApi = new RestApi(this, "restApi");
+
+    restApi.root.addMethod(HttpMethod.GET);
+
+    /**
+     * Needs 2 remediations
+     * 1. Point-in-time recovery (MEDIUM)
+     * 2. Deletion protection (MEDIUM)
+     */
+    new Table(this, "table", {
+      partitionKey: {
+        name: "id",
+        type: AttributeType.STRING,
+      },
+      pointInTimeRecovery: true,
+      deletionProtection: true,
+    });
+
+    // new Vpc(this, "vpc"); // wait for Elastic IP quota increase
+
+    /**
+     * Needs 1 remediation for NIST
+     * 1. TODO: Encryption at rest (MEDIUM)
+     */
+    new Queue(this, "queue");
   }
 }
