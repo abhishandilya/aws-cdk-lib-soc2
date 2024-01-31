@@ -2,7 +2,6 @@ import * as cdk from "aws-cdk-lib";
 import { RestApi } from "aws-cdk-lib/aws-apigateway";
 import { CloudFrontWebDistribution } from "aws-cdk-lib/aws-cloudfront";
 import { AttributeType, Table } from "aws-cdk-lib/aws-dynamodb";
-import { Vpc } from "aws-cdk-lib/aws-ec2";
 import { HttpMethod } from "aws-cdk-lib/aws-events";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Bucket } from "aws-cdk-lib/aws-s3";
@@ -47,7 +46,7 @@ export class ControlStack extends cdk.Stack {
 
     new Topic(this, "SnsTopic");
 
-    new Vpc(this, "vpc");
+    // new Vpc(this, "vpc"); // wait for the Elastic IP quota
 
     new Queue(this, "queue");
 
