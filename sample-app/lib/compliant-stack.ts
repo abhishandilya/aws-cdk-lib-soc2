@@ -1,5 +1,5 @@
 import * as cdk from "aws-cdk-lib";
-import { RestApi } from "aws-cdk-lib/aws-apigateway";
+import { MethodLoggingLevel, RestApi } from "aws-cdk-lib/aws-apigateway";
 import {
   CloudFrontWebDistribution,
   FailoverStatusCode,
@@ -142,11 +142,16 @@ export class CompliantStack extends cdk.Stack {
 
     /**
      * Needs 3 remediations
-     * 1. TODO: Execution logging (MEDIUM)
+     * 1. Execution logging (MEDIUM)
      * 2. TODO: WAF (MEDIUM)
-     * 3. TODO: X-Ray tracing (LOW)
+     * 3. X-Ray tracing (LOW)
      */
-    const restApi = new RestApi(this, "restApi");
+    const restApi = new RestApi(this, "restApi", {
+      deployOptions: {
+        tracingEnabled: true,
+        loggingLevel: MethodLoggingLevel.ERROR,
+      },
+    });
 
     restApi.root.addMethod(HttpMethod.GET);
 
@@ -167,8 +172,7 @@ export class CompliantStack extends cdk.Stack {
     // new Vpc(this, "vpc"); // wait for Elastic IP quota increase
 
     /**
-     * Needs 1 remediation for NIST
-     * 1. TODO: Encryption at rest (MEDIUM)
+     * Compliant by default
      */
     new Queue(this, "queue");
   }
