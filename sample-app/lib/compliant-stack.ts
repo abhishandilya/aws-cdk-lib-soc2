@@ -13,7 +13,7 @@ import { Bucket, EventType } from "aws-cdk-lib/aws-s3";
 import { SnsDestination } from "aws-cdk-lib/aws-s3-notifications";
 import { LoggingProtocol, Topic } from "aws-cdk-lib/aws-sns";
 import { Queue } from "aws-cdk-lib/aws-sqs";
-import { CfnWebACL } from "aws-cdk-lib/aws-wafv2";
+import { CfnWebACL, CfnWebACLAssociation } from "aws-cdk-lib/aws-wafv2";
 import { Construct } from "constructs";
 
 export class CompliantStack extends cdk.Stack {
@@ -80,7 +80,7 @@ export class CompliantStack extends cdk.Stack {
      * 2. Logging
      * 3. Metrics
      */
-    const cloudfrontWebACL = new CfnWebACL(this, "WebACL", {
+    const cloudfrontWebACL = new CfnWebACL(this, "CloudfrontWebACL", {
       defaultAction: {
         allow: {},
       },
@@ -141,6 +141,38 @@ export class CompliantStack extends cdk.Stack {
       ],
     });
 
+    const regionalWebACL = new CfnWebACL(this, "RegionalWebACL", {
+      defaultAction: {
+        allow: {},
+      },
+      scope: "REGIONAL",
+      visibilityConfig: {
+        sampledRequestsEnabled: true,
+        cloudWatchMetricsEnabled: true,
+        metricName: "webACL",
+      },
+      rules: [
+        {
+          name: "AWS-AWSManagedRulesAmazonIpReputationList",
+          priority: 0,
+          statement: {
+            managedRuleGroupStatement: {
+              name: "AWSManagedRulesAmazonIpReputationList",
+              vendorName: "AWS",
+            },
+          },
+          overrideAction: {
+            none: {},
+          },
+          visibilityConfig: {
+            cloudWatchMetricsEnabled: true,
+            sampledRequestsEnabled: true,
+            metricName: "AWS-AWSManagedRulesAmazonIpReputationList",
+          },
+        },
+      ],
+    });
+
     /**
      * Needs 3 remediations
      * 1. Execution logging (MEDIUM)
@@ -155,6 +187,15 @@ export class CompliantStack extends cdk.Stack {
     });
 
     restApi.root.addMethod(HttpMethod.GET);
+
+    new CfnWebACLAssociation(this, "RegionalWebACLAssociation", {
+      webAclArn: regionalWebACL.attrArn,
+      resourceArn: `arn:aws:apigateway:${
+        cdk.Stack.of(this).region
+      }::/restapis/${restApi.restApiId}/stages/${
+        restApi.deploymentStage.stageName
+      }`,
+    });
 
     /**
      * Needs 2 remediations
