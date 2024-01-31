@@ -1,6 +1,9 @@
 import * as cdk from "aws-cdk-lib";
 import { MethodLoggingLevel, RestApi } from "aws-cdk-lib/aws-apigateway";
 import {
+  CachePolicy,
+  CfnDistribution,
+  CfnOriginAccessControl,
   CloudFrontWebDistribution,
   FailoverStatusCode,
 } from "aws-cdk-lib/aws-cloudfront";
@@ -139,6 +142,35 @@ export class CompliantStack extends cdk.Stack {
           failoverCriteriaStatusCodes: [FailoverStatusCode.FORBIDDEN],
         },
       ],
+    });
+
+    const originAccessControl = new CfnOriginAccessControl(this, "OAC", {
+      originAccessControlConfig: {
+        name: "oac",
+        originAccessControlOriginType: "s3",
+        signingBehavior: "always",
+        signingProtocol: "sigv4",
+      },
+    });
+
+    new CfnDistribution(this, "cloudfront-raw", {
+      distributionConfig: {
+        defaultCacheBehavior: {
+          allowedMethods: ["HEAD", "GET"],
+          targetOriginId: "something",
+          viewerProtocolPolicy: "allow-all",
+          cachePolicyId: CachePolicy.CACHING_OPTIMIZED.cachePolicyId,
+        },
+        enabled: true,
+        origins: [
+          {
+            id: "something",
+            domainName: bucket.bucketDomainName,
+            originAccessControlId: originAccessControl.attrId,
+            s3OriginConfig: {},
+          },
+        ],
+      },
     });
 
     const regionalWebACL = new CfnWebACL(this, "RegionalWebACL", {
