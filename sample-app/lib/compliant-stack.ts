@@ -208,7 +208,7 @@ export class CompliantStack extends cdk.Stack {
     /**
      * Needs 3 remediations
      * 1. Execution logging (MEDIUM)
-     * 2. TODO: WAF (MEDIUM)
+     * 2. WAF (MEDIUM)
      * 3. X-Ray tracing (LOW)
      */
     const restApi = new RestApi(this, "restApi", {
